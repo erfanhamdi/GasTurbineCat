@@ -1,0 +1,208 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Dec 07 11:53:26 2018
+
+@author: Erfan
+"""
+
+import CoolProp.CoolProp as cp
+import numpy as np
+Cp,Cv,P,T,s,h,hf,hd,Ts,Tst,ss,rho,alpha_hp,beta_hp,w_hp,V_hp,A_hp,M_hp,Tst_hp,Cp_hp={},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{},{}
+h0_hp,P0_hp,h0_hprel,h0_lp,h0_lprel={},{},{},{},{}
+alpha_lp,beta_lp,w_lp,V_lp,Tst_lp,P0_lp,Cp_lp,A_lp,M_lp={},{},{},{},{},{},{},{},{}
+Pamb=101325 
+Tamb=15+273.15
+
+Mexh=289           #Exhuast air Flow
+
+eff=0.365          #Efficiency
+
+Pel=97.7           #Electrical output
+
+P[1]=Pamb
+T[1]=Tamb
+P[4]=Pamb
+T[4]=538+273.15
+P[2]=17*P[1]
+P[3]=P[2]*0.95   #5% pressure loss in Combustion Chamber
+
+eta_pC=0.80      #Polytropic Efficiency
+eta_pT=0.75
+
+gas='Air'
+ch4='CH4'
+
+Cp[1]=cp.PropsSI('C','T',T[1],'P',P[1],gas)
+Cv[1]=cp.PropsSI ('CVMASS','T',T[1],'P',P[1],gas)
+
+gamma=Cp[1]/Cv[1]
+gamma1=(gamma-1)/gamma
+gamma2=gamma1/eta_pC
+gamma3=gamma1*eta_pT
+
+LHV=50000
+
+T[2]=T[1]*(17**gamma2)
+T[3]=T[4]*((P[3]/P[4])**gamma3)
+h[2]=cp.PropsSI('H','T',T[2],'P',P[2],gas)
+h[3]=cp.PropsSI('H','T',T[3],'P',P[3],gas)
+h[4]=cp.PropsSI('H','T',T[4],'P',P[4],gas)
+
+deltaHAir=h[3]-h[2]
+hf[3]=cp.PropsSI('H','T',T[3],'P',P[3],ch4)
+hf[1]=cp.PropsSI('H','T',T[1],'P',P[1],ch4)
+deltaHFuel=hf[3]-hf[1]
+x=((deltaHAir+deltaHFuel)/1000)/LHV
+M_air=Mexh/(1+x)
+hd[3]=h[3]+x*hf[3]
+
+h[1]=cp.PropsSI('H','T',T[1],'P',P[1],gas)
+P_comp=M_air*((h[2]-h[1])/1000)
+P_turb=Mexh*((hd[3]-h[4])/1000)
+P_el=(P_turb-P_comp)*0.36*0.99
+
+s[1]=cp.PropsSI('S','T',T[1],'P',P[1],gas)
+s[2]=cp.PropsSI('S','T',T[2],'P',P[2],gas)
+s[3]=cp.PropsSI('S','T',T[3],'P',P[3],gas)
+s[4]=cp.PropsSI('S','T',T[4],'P',P[4],gas)
+
+Ts[2]=cp.PropsSI('T','S',s[1],'P',P[2],gas)
+Ts[3]=cp.PropsSI('T','S',s[3],'P',P[3],gas)
+ss[2]=cp.PropsSI('S','T',Ts[2],'P',P[2],gas)
+ss[3]=cp.PropsSI('S','T',Ts[3],'P',P[3],gas)
+ss[4]=cp.PropsSI('S','T',T[4],'P',P[4],gas)
+
+r_hub=0.215
+r_top=0.86
+r_hp=0.5*(r_hub+r_top)
+
+N_hp=4580
+U_hp=(N_hp*2*np.pi/60)*r_hp
+
+W_hp=P_comp/M_air   #High pressure turbine work is equal to the compressor work
+psi_hp=((W_hp*1000)/U_hp**2)/2   #Load factor for each stage 
+phi_hp=0.95  #Based on smith diagram
+
+R_hp=0
+alpha_hp[1]=np.arctan((1-psi_hp/2-R_hp)/(-phi_hp))
+alpha_hp[2]=np.arctan((2*(1-R_hp)/(phi_hp))+np.tan(alpha_hp[1]))
+beta_hp[2]=np.arctan(np.tan(alpha_hp[2])-1/phi_hp)
+beta_hp[3]=beta_hp[2]
+alpha_hp[3]=np.arctan(np.tan(beta_hp[3])-1/phi_hp)
+
+V_a=phi_hp*U_hp
+DVw=psi_hp*U_hp
+w_hp[3]=(DVw/2)/np.sin(beta_hp[3])
+V_hp[3]=(DVw/2-U_hp)/np.sin(alpha_hp[3])
+V_hp[2]=(DVw-V_hp[3]*np.sin(alpha_hp[3]))/np.sin(alpha_hp[2])
+
+rho[3]=cp.PropsSI('D','T',T[3],'P',P[3],gas)
+Ax=Mexh/(rho[3]*V_a)
+V_hp[1]=Mexh/(rho[3]*Ax*np.cos(alpha_hp[1]))
+
+Cp_hp[1]=cp.PropsSI('C','T',T[3],'P',P[3],gas)
+Tst_hp[1]=T[3]+(V_hp[3]**2)/(2*Cp_hp[1])
+A_hp[1]=cp.PropsSI('A','T',Tst_hp[1],'P',P[3],gas)
+M_hp[1]=V_hp[1]/A_hp[1]
+h0_hp[1]=h[3]+(V_hp[1]**2)/2
+P0_hp[1]=P[3]*(Tst_hp[1]/T[3])**(1/gamma3)
+
+h0_hp[2]=h0_hp[1]
+Tst_hp[2]=h0_hp[2]/Cp_hp[1]
+P0_hp[2]=P0_hp[1]*(Tst_hp[2]/Tst_hp[1])**(1/gamma3)
+A_hp[2]=cp.PropsSI('A','T',Tst_hp[2],'P',P0_hp[2],gas)
+M_hp[2]=V_hp[2]/A_hp[2]
+
+h0_hprel[2]=h0_hp[2]-(V_hp[2]**2)/2+(w_hp[3]**2)/2
+h0_hprel[3]=h0_hprel[2]
+h0_hp[3]=h0_hprel[3]-((w_hp[3]**2)/2)+(V_hp[3]**2)/2
+Tst_hp[3]=(h0_hprel[3]-(W_hp**2)/2+(V_hp[3]**2)/2)/Cp_hp[1]
+P0_hp[3]=P0_hp[2]*(Tst_hp[3]/Tst_hp[2])**(1/gamma3)
+A_hp[3]=cp.PropsSI('A','T',Tst_hp[3],'P',P0_hp[3],gas)
+M_hp[3]=V_hp[3]/A_hp[3]
+
+#### 2nd  Stage
+M_hp[4]=M_hp[3]
+
+Tst_hp[4]=Tst_hp[3]
+h0_hp[4]=h0_hp[3]
+h0_hp[5]=h0_hp[4]
+Tst_hp[5]=h0_hp[5]/Cp_hp[1]
+P0_hp[5]=P0_hp[3]*(Tst_hp[5]/Tst_hp[4])**(1/gamma3)
+A_hp[5]=cp.PropsSI('A','T',Tst_hp[5],'P',P0_hp[5],gas)
+M_hp[5]=V_hp[2]/A_hp[5]
+
+h0_hprel[5]=h0_hp[5]-(V_hp[2]**2)/2+(w_hp[3]**2)/2
+h0_hprel[6]=h0_hprel[5]
+h0_hp[6]=h0_hprel[6]-((w_hp[3]**2)/2)+(V_hp[3]**2)/2
+Tst_hp[6]=(h0_hprel[6]-(W_hp**2)/2+(V_hp[3]**2)/2)/Cp_hp[1]
+P0_hp[6]=P0_hp[5]*(Tst_hp[6]/Tst_hp[5])**(1/gamma3)
+A_hp[6]=cp.PropsSI('A','T',Tst_hp[6],'P',P0_hp[6],gas)
+M_hp[6]=V_hp[3]/A_hp[6]
+
+#### Low pressure Part
+r_hublp=0.215
+r_toplp=0.86
+r_lp=0.6
+
+N_lp=3000
+U_lp=(N_lp*2*np.pi/60)*r_lp
+
+W_lp=P_el/Mexh   #High pressure turbine work is equal to the compressor work
+psi_lp=((W_lp*1000)/U_lp**2)/2   #Load factor for each stage 
+phi_lp=0.95  #Based on smith diagram
+
+R_lp=0.5
+alpha_lp[1]=np.arctan((1-psi_lp/2-R_lp)/(-phi_lp))
+alpha_lp[2]=np.arctan((2*(1-R_lp)/(phi_lp))+np.tan(alpha_lp[1]))
+beta_lp[2]=alpha_lp[1]
+beta_lp[3]=alpha_lp[2]
+alpha_lp[3]=alpha_lp[1]
+
+DVw_lp=psi_lp*U_lp
+w_lp[3]=(V_a)/np.cos(beta_lp[3])
+V_lp[3]=(V_a)/np.cos(alpha_lp[3])
+V_lp[2]=(V_a)/np.cos(alpha_lp[2])
+w_lp[2]=(V_a)/np.cos(beta_lp[2])
+V_lp[1]=V_hp[3]
+
+Tst_lp[1]=Tst_hp[6]
+P0_lp[1]=P0_hp[6]
+A_lp[1]=cp.PropsSI('A','T',Tst_lp[1],'P',P0_lp[1],gas)
+M_lp[1]=V_lp[1]/A_lp[1]
+h0_lp[1]=h0_hp[6]
+
+Cp_lp[1]=cp.PropsSI('C','T',Tst_lp[1],'P',P0_lp[1],gas)
+h0_lp[2]=h0_lp[1]
+Tst_lp[2]=h0_lp[2]/Cp_hp[1]
+P0_lp[2]=P0_lp[1]*(Tst_lp[2]/Tst_lp[1])**(1/gamma3)
+A_lp[2]=cp.PropsSI('A','T',Tst_lp[2],'P',P0_lp[2],gas)
+M_lp[2]=V_lp[2]/A_lp[2]
+
+h0_lprel[2]=h0_lp[2]-(V_lp[2]**2)/2+(w_lp[2]**2)/2
+h0_lprel[3]=h0_lprel[2]
+h0_lp[3]=h0_lprel[3]-((w_lp[3]**2)/2)+(V_lp[3]**2)/2
+Tst_lp[3]=(h0_lprel[3]-(w_lp[3]**2)/2+(V_lp[3]**2)/2)/Cp_lp[1]
+P0_lp[3]=P0_lp[2]*(Tst_lp[3]/Tst_lp[2])**(1/gamma3)
+A_lp[3]=cp.PropsSI('A','T',Tst_lp[3],'P',P0_lp[3],gas)
+M_lp[3]=V_lp[3]/A_lp[3]
+
+##### 2nd Stage
+
+M_lp[4]=M_lp[3]
+
+Tst_lp[4]=Tst_lp[3]
+h0_lp[4]=h0_lp[3]
+h0_lp[5]=h0_lp[4]
+Tst_lp[5]=h0_lp[5]/Cp_lp[1]
+P0_lp[5]=P0_lp[3]*(Tst_lp[5]/Tst_lp[4])**(1/gamma3)
+A_lp[5]=cp.PropsSI('A','T',Tst_lp[5],'P',P0_lp[5],gas)
+M_lp[5]=V_lp[2]/A_lp[5]
+
+h0_lprel[5]=h0_lp[5]-(V_lp[2]**2)/2+(w_lp[3]**2)/2
+h0_lprel[6]=h0_lprel[5]
+h0_lp[6]=h0_lprel[6]-((w_lp[3]**2)/2)+(V_lp[3]**2)/2
+Tst_lp[6]=(h0_lprel[6]-(W_lp**2)/2+(V_lp[3]**2)/2)/Cp_lp[1]
+P0_lp[6]=P0_lp[5]*(Tst_lp[6]/Tst_lp[5])**(1/gamma3)
+A_lp[6]=cp.PropsSI('A','T',Tst_lp[6],'P',P0_lp[6],gas)
+M_lp[6]=V_lp[3]/A_lp[6]
